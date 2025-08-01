@@ -1,17 +1,17 @@
+mod nats;
+mod process_payment;
+mod routes;
+
 use std::net::SocketAddr;
-use warp::Filter;
+
+use crate::process_payment::process_payment;
 
 #[tokio::main]
-async fn main() {
-    let payments = warp::path("payments")
-        .and(warp::post())
-        .and(warp::body::bytes())
-        .map(|body: bytes::Bytes| {
-            // Here you would process the payment data
-            println!("Received payment data: {:?}", body);
-            warp::reply::json(&"Payment processed successfully")
-        });
-    let routes = payments.with(warp::log("payments"));
+async fn main() -> Result<(), Box<dyn core::error::Error>> {
+    let nats_client = nats::get_nats_client().await?;
+
+    nats::register_subscriber(nats_client.clone(), "payments", process_payment).await?;
+
     let port = std::env::var("PORT")
         .unwrap_or_else(|_| "3000".to_string())
         .parse()
@@ -20,5 +20,9 @@ async fn main() {
 
     println!("Server running on http://{}", addr);
 
-    warp::serve(routes).run(addr).await;
+    let routes = routes::routes(nats_client).await;
+
+    routes::serve(routes, addr).await;
+
+    Ok(())
 }
