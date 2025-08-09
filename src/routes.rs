@@ -1,5 +1,4 @@
-use std::net::SocketAddr;
-
+use tokio_stream::wrappers::UnixListenerStream;
 use warp::Filter;
 
 async fn payments_handler(
@@ -29,7 +28,7 @@ pub async fn serve(
     + Send
     + 'static
     + Sync,
-    addr: SocketAddr,
+    unix_listener: UnixListenerStream,
 ) {
-    warp::serve(routes).run(addr).await
+    warp::serve(routes).run_incoming(unix_listener).await
 }

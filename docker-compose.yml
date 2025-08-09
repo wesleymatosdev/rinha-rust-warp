@@ -10,8 +10,10 @@ services:
       - PORT=3000
       - DEFAULT_PAYMENT_PROCESSOR_URL=http://payment-processor-default:8080
       - FALLBACK_PAYMENT_PROCESSOR_URL=http://payment-processor-fallback:8080
+      - UNIX_SOCKET_PATH=/tmp/rinha01.sock
     volumes:
       - .:/usr/src/app
+      - sockets:/tmp
     networks:
       - backend
       # - payment-processor
@@ -29,10 +31,19 @@ services:
   api02:
     <<: *api01
     hostname: api02
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - NATS_URL=nats://nats:4222
+      - PORT=3000
+      - DEFAULT_PAYMENT_PROCESSOR_URL=http://payment-processor-default:8080
+      - FALLBACK_PAYMENT_PROCESSOR_URL=http://payment-processor-fallback:8080
+      - UNIX_SOCKET_PATH=/tmp/rinha02.sock
     networks:
       - backend
     volumes:
       - .:/usr/src/app
+      - sockets:/tmp
 
   nginx:
     image: nginx:latest
@@ -40,6 +51,7 @@ services:
       - "9999:9999"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - sockets:/tmp
     networks:
       - backend
     depends_on:
@@ -76,3 +88,6 @@ networks:
     driver: bridge
   # payment-processor:
   #   external: true
+
+volumes:
+  sockets:
