@@ -26,8 +26,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.30'
-          memory: '75MB'
+          cpus: '0.10'
+          memory: '10MB'
 
   api02:
     <<: *api01
@@ -71,8 +71,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.25'
-          memory: '50MB'
+          cpus: '0.15'
+          memory: '30MB'
 
   worker02:
     build:
@@ -94,8 +94,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.25'
-          memory: '50MB'
+          cpus: '0.20'
+          memory: '40MB'
 
   nginx:
     image: nginx:latest
@@ -112,8 +112,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.4'
-          memory: '100MB'
+          cpus: '0.30'
+          memory: '80MB'
 
   nats:
     image: nats:2.10.16-alpine3.19
@@ -160,8 +160,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.4'
-          memory: '70MB'
+          cpus: '0.35'
+          memory: '100MB'
 
 networks:
   backend:
