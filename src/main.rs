@@ -1,35 +1,32 @@
 mod nats;
 mod process_payment;
-mod queue;
 mod routes;
 
-use std::os::unix::fs::PermissionsExt;
-use tokio::net::UnixListener;
-use tokio_stream::wrappers::UnixListenerStream;
+use sqlx::postgres::PgPoolOptions;
 
-use crate::process_payment::process_payment;
+use crate::routes::Server;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn core::error::Error>> {
+    // Initialize the logger
+    env_logger::init();
     let nats_client = nats::get_nats_client().await?;
+    let jetstream_context = async_nats::jetstream::new(nats_client.clone());
 
-    nats::register_subscriber(nats_client.clone(), "payments", process_payment).await?;
+    let pg_pool = PgPoolOptions::new()
+        .min_connections(1)
+        .connect(&std::env::var("DATABASE_URL")?)
+        .await
+        .expect("Failed to connect to the database");
 
-    let routes = routes::routes(nats_client).await;
+    let payment_processor =
+        process_payment::PaymentProcessor::new(pg_pool.clone(), jetstream_context.clone());
 
-    let unix_socket_path =
-        std::env::var("UNIX_SOCKET_PATH").unwrap_or_else(|_| "/tmp/rinha.sock".to_string());
+    tokio::spawn(async move { payment_processor.start().await });
 
-    let listener = UnixListener::bind(&unix_socket_path)
-        .unwrap_or_else(|_| panic!("Failed to bind to Unix socket at {}", unix_socket_path));
+    let server = Server::new(jetstream_context, pg_pool);
 
-    // Set permissions to allow nginx to connect (0o666 = read/write for all)
-    std::fs::set_permissions(&unix_socket_path, std::fs::Permissions::from_mode(0o666))?;
-    // let listener = tokio::net::UnixListener::bind(unix_socket_path)?;
-
-    let stream = UnixListenerStream::new(listener);
-
-    routes::serve(routes, stream).await;
+    server.start().await.expect("Failed to start server");
 
     Ok(())
 }
