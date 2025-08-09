@@ -1,4 +1,4 @@
-use rinha_rust_warp::{PaymentProcessor, nats};
+use rinha_rust_warp::{PaymentProcessor, get_nats_client};
 use sqlx::postgres::PgPoolOptions;
 
 #[tokio::main]
@@ -6,7 +6,7 @@ async fn main() -> Result<(), Box<dyn core::error::Error>> {
     // Initialize the logger
     env_logger::init();
 
-    let nats_client = nats::get_nats_client().await?;
+    let nats_client = get_nats_client().await?;
     let jetstream_context = async_nats::jetstream::new(nats_client.clone());
 
     let pg_pool = PgPoolOptions::new()

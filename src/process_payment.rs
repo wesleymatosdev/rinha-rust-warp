@@ -236,6 +236,8 @@ impl PaymentProcessor {
             Duration::from_millis(100),
             Duration::from_millis(250),
             Duration::from_millis(500),
+            Duration::from_secs(1),
+            Duration::from_secs(2),
         ];
 
         PaymentProcessor {
@@ -249,7 +251,7 @@ impl PaymentProcessor {
     pub async fn start(self) {
         get_stream(&self.jetstream_context)
             .await
-            .try_for_each_concurrent(500, async |msg| {
+            .try_for_each_concurrent(1000, async |msg| {
                 msg.ack().await.expect("Failed to acknowledge message");
                 let pg_pool = self.pg_pool.clone();
                 let jetstream_context = self.jetstream_context.clone();
