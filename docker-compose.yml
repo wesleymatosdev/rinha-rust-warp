@@ -3,6 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    command: ["./server"]
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
@@ -31,6 +32,7 @@ services:
   api02:
     <<: *api01
     hostname: api02
+    command: ["./server"]
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
@@ -47,6 +49,53 @@ services:
     volumes:
       - .:/usr/src/app
       - sockets:/tmp
+
+  # Payment processing workers
+  worker01:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["./worker"]
+    environment:
+      - NATS_URL=nats://nats:4222
+      - DEFAULT_PAYMENT_URL=http://payment-processor-default:8080
+      - FALLBACK_PAYMENT_URL=http://payment-processor-fallback:8080
+      - DATABASE_URL=postgres://myuser:mypassword@postgres:5432/payments
+      - RUST_LOG=rinha_rust_warp=info
+    networks:
+      - backend
+      - payment-processor
+    depends_on:
+      - nats
+      - postgres
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: '50MB'
+
+  worker02:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["./worker"]
+    environment:
+      - NATS_URL=nats://nats:4222
+      - DEFAULT_PAYMENT_URL=http://payment-processor-default:8080
+      - FALLBACK_PAYMENT_URL=http://payment-processor-fallback:8080
+      - DATABASE_URL=postgres://myuser:mypassword@postgres:5432/payments
+      - RUST_LOG=rinha_rust_warp=info
+    networks:
+      - backend
+      - payment-processor
+    depends_on:
+      - nats
+      - postgres
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: '50MB'
 
   nginx:
     image: nginx:latest

@@ -1,15 +1,11 @@
-mod nats;
-mod process_payment;
-mod routes;
-
+use rinha_rust_warp::{PaymentProcessor, nats};
 use sqlx::postgres::PgPoolOptions;
-
-use crate::routes::Server;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn core::error::Error>> {
     // Initialize the logger
     env_logger::init();
+
     let nats_client = nats::get_nats_client().await?;
     let jetstream_context = async_nats::jetstream::new(nats_client.clone());
 
@@ -19,10 +15,10 @@ async fn main() -> Result<(), Box<dyn core::error::Error>> {
         .await
         .expect("Failed to connect to the database");
 
-    let server = Server::new(jetstream_context, pg_pool);
+    let payment_processor = PaymentProcessor::new(pg_pool.clone(), jetstream_context.clone());
 
-    log::info!("Starting server...");
-    server.start().await.expect("Failed to start server");
+    log::info!("Starting payment processor worker...");
+    payment_processor.start().await;
 
     Ok(())
 }

@@ -3,6 +3,18 @@ name = "rinha-rust-warp"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+name = "rinha_rust_warp"
+path = "src/lib.rs"
+
+[[bin]]
+name = "server"
+path = "src/bin/server.rs"
+
+[[bin]]
+name = "worker"
+path = "src/bin/worker.rs"
+
 [dependencies]
 anyhow = "1.0.98"
 async-nats = "0.42.0"

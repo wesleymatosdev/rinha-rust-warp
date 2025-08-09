@@ -13,11 +13,13 @@ RUN cargo chef cook --release --recipe-path recipe.json
 # Build application
 COPY src src
 COPY Cargo.toml Cargo.lock ./
-RUN cargo build --release
+RUN cargo build --release --bin server --bin worker
 
 # We do not need the Rust toolchain to run the binary!
 FROM debian:bookworm-slim AS runtime
 RUN apt-get update && apt-get install -y pkg-config libssl-dev
 WORKDIR /app
-COPY --from=builder /app/target/release/rinha-rust-warp /usr/local/bin
-ENTRYPOINT ["/usr/local/bin/rinha-rust-warp"]
+COPY --from=builder /app/target/release/server ./server
+COPY --from=builder /app/target/release/worker ./worker
+# Default to server, but can be overridden
+CMD ["./server"]
