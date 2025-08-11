@@ -28,7 +28,7 @@ services:
       resources:
         limits:
           cpus: '0.25'
-          memory: '50MB'
+          memory: '10MB'
 
   api02:
     <<: *api01
@@ -48,6 +48,11 @@ services:
     volumes:
       - .:/usr/src/app
       - sockets:/var
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: '10MB'
 
   openresty:
     image: openresty/openresty
@@ -65,8 +70,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.30'
-          memory: '100MB'
+          cpus: '0.25'
+          memory: '50MB'
 
   # Payment processing workers
   worker01:
@@ -90,7 +95,7 @@ services:
       resources:
         limits:
           cpus: '0.15'
-          memory: '60MB'
+          memory: '25MB'
 
   worker02:
     build:
@@ -112,8 +117,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.20'
-          memory: '60MB'
+          cpus: '0.15'
+          memory: '25MB'
 
   nats:
     image: nats:2.10.16-alpine3.19
@@ -135,7 +140,7 @@ services:
       resources:
         limits:
           cpus: '0.2'
-          memory: '50MB'
+          memory: '30MB'
 
   postgres:
     image: postgres:17.5-alpine
@@ -160,7 +165,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.35'
+          cpus: '0.25'
           memory: '100MB'
 
 networks:
