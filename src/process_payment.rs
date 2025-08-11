@@ -46,16 +46,17 @@ impl TryFrom<bytes::Bytes> for Payment {
             .map_err(|e| anyhow::anyhow!("Failed to deserialize payment: {}", e))
     }
 }
-
+#[allow(dead_code)]
 static DEFAULT_PAYMENT_URL: OnceLock<String> = OnceLock::new();
+#[allow(dead_code)]
 static FALLBACK_PAYMENT_URL: OnceLock<String> = OnceLock::new();
-
+#[allow(dead_code)]
 pub fn get_default_payment_url() -> &'static str {
     DEFAULT_PAYMENT_URL.get_or_init(|| {
         std::env::var("DEFAULT_PAYMENT_URL").unwrap_or_else(|_| "http://localhost:8001".to_string())
     })
 }
-
+#[allow(dead_code)]
 pub fn get_fallback_payment_url() -> &'static str {
     FALLBACK_PAYMENT_URL.get_or_init(|| {
         std::env::var("FALLBACK_PAYMENT_URL")
@@ -63,6 +64,7 @@ pub fn get_fallback_payment_url() -> &'static str {
     })
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 enum Gateway {
     Default,
@@ -70,6 +72,7 @@ enum Gateway {
 }
 
 impl Gateway {
+    #[allow(dead_code)]
     fn to_string(&self) -> &'static str {
         match self {
             Gateway::Default => "default",
@@ -77,6 +80,7 @@ impl Gateway {
         }
     }
 
+    #[allow(dead_code)]
     fn url(&self) -> &'static str {
         match self {
             Gateway::Default => get_default_payment_url(),
@@ -85,6 +89,7 @@ impl Gateway {
     }
 }
 
+#[allow(dead_code)]
 async fn send_payment(
     http_client: &Client,
     payment: &Payment,
@@ -110,6 +115,7 @@ async fn send_payment(
     }
 }
 
+#[allow(dead_code)]
 async fn save_payment_to_db(
     pg_pool: &Pool<sqlx::Postgres>,
     payment: &Payment,
@@ -140,6 +146,7 @@ async fn save_payment_to_db(
     }
 }
 
+#[allow(dead_code)]
 async fn process_payment(
     http_client: &Client,
     pg_pool: &Pool<sqlx::Postgres>,
@@ -176,7 +183,6 @@ async fn process_payment(
                     payment.correlation_id,
                     e
                 );
-                tokio::time::sleep(duration.to_owned()).await;
             }
         }
     }
@@ -187,6 +193,7 @@ async fn process_payment(
     ))
 }
 
+#[allow(dead_code)]
 async fn get_stream(ctx: &Context) -> consumer::pull::Stream {
     let stream = ctx
         .create_stream(Config {
@@ -218,6 +225,7 @@ async fn get_stream(ctx: &Context) -> consumer::pull::Stream {
         .expect("Failed to get messages from consumer")
 }
 
+#[allow(dead_code)]
 pub struct PaymentProcessor {
     http_client: Client,
     pg_pool: Pool<sqlx::Postgres>,
@@ -226,17 +234,15 @@ pub struct PaymentProcessor {
 }
 
 impl PaymentProcessor {
+    #[allow(dead_code)]
     pub fn new(pg_pool: Pool<sqlx::Postgres>, jetstream_context: Context) -> Self {
         let http_client = Client::builder()
             .timeout(Duration::from_secs(10))
             .build()
             .expect("Failed to create HTTP client");
         let backoff_rule = vec![
-            Duration::from_millis(50),
-            Duration::from_millis(100),
             Duration::from_millis(250),
             Duration::from_millis(500),
-            Duration::from_secs(1),
             Duration::from_secs(2),
         ];
 
@@ -248,40 +254,47 @@ impl PaymentProcessor {
         }
     }
 
+    #[allow(dead_code)]
     pub async fn start(self) {
         get_stream(&self.jetstream_context)
             .await
-            .try_for_each_concurrent(1000, async |msg| {
-                msg.ack().await.expect("Failed to acknowledge message");
-                let pg_pool = self.pg_pool.clone();
-                let jetstream_context = self.jetstream_context.clone();
-                let http_client = self.http_client.clone();
-                let backoff_rule = self.backoff_rule.clone();
+            .try_for_each_concurrent(
+                std::env::var("MAX_CONCURRENT_MESSAGES")
+                    .unwrap_or_else(|_| "200".into())
+                    .parse()
+                    .unwrap_or(200),
+                async |msg| {
+                    msg.ack().await.expect("Failed to acknowledge message");
+                    let pg_pool = self.pg_pool.clone();
+                    let jetstream_context = self.jetstream_context.clone();
+                    let http_client = self.http_client.clone();
+                    let backoff_rule = self.backoff_rule.clone();
 
-                log::info!("Received payload message: {:?}", msg.payload);
-                let payment = match Payment::try_from(msg.payload.clone()) {
-                    Ok(payment) => payment,
-                    Err(e) => {
-                        log::error!("Failed to deserialize payment: {:?}", e);
-                        return Ok(());
-                    }
-                };
+                    log::info!("Received payload message: {:?}", msg.payload);
+                    let payment = match Payment::try_from(msg.payload.clone()) {
+                        Ok(payment) => payment,
+                        Err(e) => {
+                            log::error!("Failed to deserialize payment: {:?}", e);
+                            return Ok(());
+                        }
+                    };
 
-                match process_payment(&http_client, &pg_pool, &payment, &backoff_rule).await {
-                    Ok(_) => {
-                        log::debug!("Payment processed successfully");
-                    }
-                    Err(_) => {
-                        log::warn!("Requeing payment: {}", payment.correlation_id);
-                        jetstream_context
-                            .publish(msg.subject.clone(), msg.payload.clone())
-                            .await
-                            .expect("Failed to requeue message");
-                    }
-                };
+                    match process_payment(&http_client, &pg_pool, &payment, &backoff_rule).await {
+                        Ok(_) => {
+                            log::debug!("Payment processed successfully");
+                        }
+                        Err(_) => {
+                            log::warn!("Requeing payment: {}", payment.correlation_id);
+                            jetstream_context
+                                .publish(msg.subject.clone(), msg.payload.clone())
+                                .await
+                                .expect("Failed to requeue message");
+                        }
+                    };
 
-                Ok(())
-            })
+                    Ok(())
+                },
+            )
             .await
             .map_err(|e| {
                 log::error!("Error processing payments: {:?}", e);
