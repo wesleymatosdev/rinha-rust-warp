@@ -140,7 +140,7 @@ async fn save_payment_to_db(
             Err(anyhow::anyhow!("Failed to save payment to database: {}", e))
         }
         Ok(_) => {
-            log::info!("Payment saved to database successfully");
+            log::debug!("Payment saved to database successfully");
             Ok(())
         }
     }
@@ -265,27 +265,28 @@ impl PaymentProcessor {
                     .unwrap_or(200),
                 async |msg| {
                     msg.ack().await.expect("Failed to acknowledge message");
-                    let pg_pool = self.pg_pool.clone();
-                    let jetstream_context = self.jetstream_context.clone();
-                    let http_client = self.http_client.clone();
-                    let backoff_rule = self.backoff_rule.clone();
 
-                    log::info!("Received payload message: {:?}", msg.payload);
-                    let payment = match Payment::try_from(msg.payload.clone()) {
-                        Ok(payment) => payment,
-                        Err(e) => {
-                            log::error!("Failed to deserialize payment: {:?}", e);
-                            return Ok(());
-                        }
+                    log::debug!("Received payload message: {:?}", msg.payload);
+
+                    let Ok(payment) = Payment::try_from(msg.payload.clone()) else {
+                        log::error!("Failed to deserialize payment");
+                        return Ok(());
                     };
 
-                    match process_payment(&http_client, &pg_pool, &payment, &backoff_rule).await {
+                    match process_payment(
+                        &self.http_client,
+                        &self.pg_pool,
+                        &payment,
+                        &self.backoff_rule,
+                    )
+                    .await
+                    {
                         Ok(_) => {
                             log::debug!("Payment processed successfully");
                         }
                         Err(_) => {
                             log::warn!("Requeing payment: {}", payment.correlation_id);
-                            jetstream_context
+                            self.jetstream_context
                                 .publish(msg.subject.clone(), msg.payload.clone())
                                 .await
                                 .expect("Failed to requeue message");
