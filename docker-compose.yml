@@ -1,42 +1,46 @@
+x-base-app: &base-app
+  build:
+    context: .
+    dockerfile: Dockerfile
+  env_file: ".env"
+  volumes:
+    - .:/usr/src/app
+    - sockets:/var
+  networks:
+    - backend
+    - payment-processor
+  depends_on:
+    - nats
+    - postgres
+
+x-api-template: &api-template
+  <<: *base-app
+  command: ["./server"]
+  deploy:
+    resources:
+      limits:
+        cpus: '0.25'
+        memory: '10MB'
+
+x-worker-template: &worker-template
+  <<: *base-app
+  command: ["./worker"]
+  deploy:
+    resources:
+      limits:
+        cpus: '0.15'
+        memory: '25MB'
+
 services:
-  api01: &api01
-    build:
-      context: .
-      dockerfile: Dockerfile
-    command: ["./server"]
-    env_file: ".env"
+  api01:
+    <<: *api-template
     environment:
       - UNIX_SOCKET_PATH=/var/rinha01.sock
-    volumes:
-      - .:/usr/src/app
-      - sockets:/var
-    networks:
-      - backend
-      - payment-processor
-    depends_on:
-      - nats
-      - postgres
-    deploy:
-      resources:
-        limits:
-          cpus: '0.25'
-          memory: '10MB'
 
   api02:
-    <<: *api01
-    hostname: api02
-    command: ["./server"]
-    env_file: ".env"
+    <<: *api-template
     environment:
       - UNIX_SOCKET_PATH=/var/rinha02.sock
-    volumes:
-      - .:/usr/src/app
-      - sockets:/var
-    deploy:
-      resources:
-        limits:
-          cpus: '0.25'
-          memory: '10MB'
 
   openresty:
     image: openresty/openresty
@@ -59,40 +63,10 @@ services:
 
   # Payment processing workers
   worker01:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    command: ["./worker"]
-    env_file: .env
-    networks:
-      - backend
-      - payment-processor
-    depends_on:
-      - nats
-      - postgres
-    deploy:
-      resources:
-        limits:
-          cpus: '0.15'
-          memory: '25MB'
+    <<: *worker-template
 
   worker02:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    command: ["./worker"]
-    env_file: .env
-    networks:
-      - backend
-      - payment-processor
-    depends_on:
-      - nats
-      - postgres
-    deploy:
-      resources:
-        limits:
-          cpus: '0.15'
-          memory: '25MB'
+    <<: *worker-template
 
   nats:
     image: nats:2.10.16-alpine3.19
