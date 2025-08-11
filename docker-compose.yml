@@ -4,17 +4,9 @@ services:
       context: .
       dockerfile: Dockerfile
     command: ["./server"]
+    env_file: ".env"
     environment:
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - NATS_URL=nats://nats:4222
-      - PORT=3000
-      - DEFAULT_PAYMENT_URL=http://payment-processor-default:8080
-      - FALLBACK_PAYMENT_URL=http://payment-processor-fallback:8080
       - UNIX_SOCKET_PATH=/var/rinha01.sock
-      - DATABASE_URL=postgres://myuser:mypassword@postgres:5432/payments
-      - RUST_LOG=rinha_rust_warp=info
-      - MAX_CONCURRENT_MESSAGES=500
     volumes:
       - .:/usr/src/app
       - sockets:/var
@@ -34,17 +26,9 @@ services:
     <<: *api01
     hostname: api02
     command: ["./server"]
+    env_file: ".env"
     environment:
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - NATS_URL=nats://nats:4222
-      - PORT=3000
-      - DEFAULT_PAYMENT_URL=http://payment-processor-default:8080
-      - FALLBACK_PAYMENT_URL=http://payment-processor-fallback:8080
       - UNIX_SOCKET_PATH=/var/rinha02.sock
-      - DATABASE_URL=postgres://myuser:mypassword@postgres:5432/payments
-      - RUST_LOG=rinha_rust_warp=info
-      - MAX_CONCURRENT_MESSAGES=500
     volumes:
       - .:/usr/src/app
       - sockets:/var
@@ -79,12 +63,7 @@ services:
       context: .
       dockerfile: Dockerfile
     command: ["./worker"]
-    environment:
-      - NATS_URL=nats://nats:4222
-      - DEFAULT_PAYMENT_URL=http://payment-processor-default:8080
-      - FALLBACK_PAYMENT_URL=http://payment-processor-fallback:8080
-      - DATABASE_URL=postgres://myuser:mypassword@postgres:5432/payments
-      - RUST_LOG=rinha_rust_warp=info
+    env_file: .env
     networks:
       - backend
       - payment-processor
@@ -102,12 +81,7 @@ services:
       context: .
       dockerfile: Dockerfile
     command: ["./worker"]
-    environment:
-      - NATS_URL=nats://nats:4222
-      - DEFAULT_PAYMENT_URL=http://payment-processor-default:8080
-      - FALLBACK_PAYMENT_URL=http://payment-processor-fallback:8080
-      - DATABASE_URL=postgres://myuser:mypassword@postgres:5432/payments
-      - RUST_LOG=rinha_rust_warp=info
+    env_file: .env
     networks:
       - backend
       - payment-processor
