@@ -11,12 +11,13 @@ services:
       - PORT=3000
       - DEFAULT_PAYMENT_URL=http://payment-processor-default:8080
       - FALLBACK_PAYMENT_URL=http://payment-processor-fallback:8080
-      - UNIX_SOCKET_PATH=/tmp/rinha01.sock
+      - UNIX_SOCKET_PATH=/var/rinha01.sock
       - DATABASE_URL=postgres://myuser:mypassword@postgres:5432/payments
       - RUST_LOG=rinha_rust_warp=info
+      - MAX_CONCURRENT_MESSAGES=500
     volumes:
       - .:/usr/src/app
-      - sockets:/tmp
+      - sockets:/var
     networks:
       - backend
       - payment-processor
@@ -26,8 +27,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.10'
-          memory: '10MB'
+          cpus: '0.25'
+          memory: '50MB'
 
   api02:
     <<: *api01
@@ -40,15 +41,32 @@ services:
       - PORT=3000
       - DEFAULT_PAYMENT_URL=http://payment-processor-default:8080
       - FALLBACK_PAYMENT_URL=http://payment-processor-fallback:8080
-      - UNIX_SOCKET_PATH=/tmp/rinha02.sock
+      - UNIX_SOCKET_PATH=/var/rinha02.sock
       - DATABASE_URL=postgres://myuser:mypassword@postgres:5432/payments
       - RUST_LOG=rinha_rust_warp=info
-    networks:
-      - backend
-      - payment-processor
+      - MAX_CONCURRENT_MESSAGES=500
     volumes:
       - .:/usr/src/app
-      - sockets:/tmp
+      - sockets:/var
+
+  openresty:
+    image: openresty/openresty
+    volumes:
+      - ./nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf
+      - ./lua_scripts:/etc/nginx/lua
+      - sockets:/var
+    ports:
+      - "9999:9999"
+    networks:
+      - backend
+    depends_on:
+      - api01
+      - api02
+    deploy:
+      resources:
+        limits:
+          cpus: '0.30'
+          memory: '100MB'
 
   # Payment processing workers
   worker01:
@@ -72,7 +90,7 @@ services:
       resources:
         limits:
           cpus: '0.15'
-          memory: '30MB'
+          memory: '60MB'
 
   worker02:
     build:
@@ -95,25 +113,7 @@ services:
       resources:
         limits:
           cpus: '0.20'
-          memory: '40MB'
-
-  nginx:
-    image: nginx:latest
-    ports:
-      - "9999:9999"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - sockets:/tmp
-    networks:
-      - backend
-    depends_on:
-      - api01
-      - api02
-    deploy:
-      resources:
-        limits:
-          cpus: '0.30'
-          memory: '80MB'
+          memory: '60MB'
 
   nats:
     image: nats:2.10.16-alpine3.19
