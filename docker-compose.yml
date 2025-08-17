@@ -19,7 +19,7 @@ x-api-template: &api-template
   deploy:
     resources:
       limits:
-        cpus: '0.25'
+        cpus: '0.15'
         memory: '10MB'
 
 x-worker-template: &worker-template
@@ -42,24 +42,46 @@ services:
     environment:
       - UNIX_SOCKET_PATH=/var/rinha02.sock
 
-  openresty:
-    image: openresty/openresty
-    volumes:
-      - ./nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf
-      - ./lua_scripts:/etc/nginx/lua
-      - sockets:/var
+  uxlb:
+    image: jrblatt/uxlb
+    container_name: uxlb
     ports:
       - "9999:9999"
-    networks:
-      - backend
+    environment:
+      - LB_UPSTREAMS=/var/rinha01.sock,/var/rinha02.sock
+      - LB_WORKERS=1
+    volumes:
+      - sockets:/var
     depends_on:
       - api01
       - api02
+    networks:
+      - payment-processor
+    restart: unless-stopped
     deploy:
       resources:
         limits:
-          cpus: '0.25'
-          memory: '50MB'
+          cpus: "0.4"
+          memory: 40MB
+
+  # openresty:
+  #   image: openresty/openresty
+  #   volumes:
+  #     - ./nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf
+  #     - ./lua_scripts:/etc/nginx/lua
+  #     - sockets:/var
+  #   ports:
+  #     - "9999:9999"
+  #   networks:
+  #     - backend
+  #   depends_on:
+  #     - api01
+  #     - api02
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         cpus: '0.25'
+  #         memory: '50MB'
 
   # Payment processing workers
   worker01:
