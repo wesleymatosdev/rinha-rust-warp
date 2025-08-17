@@ -20,7 +20,7 @@ x-api-template: &api-template
     resources:
       limits:
         cpus: '0.15'
-        memory: '10MB'
+        memory: '6MB'
 
 x-worker-template: &worker-template
   <<: *base-app
@@ -28,8 +28,8 @@ x-worker-template: &worker-template
   deploy:
     resources:
       limits:
-        cpus: '0.15'
-        memory: '25MB'
+        cpus: '0.18'
+        memory: '34MB'
 
 services:
   api01:
@@ -61,7 +61,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.4"
+          cpus: "0.39"
           memory: 40MB
 
   # openresty:

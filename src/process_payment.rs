@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use async_nats::jetstream::{Context, consumer, stream::Config};
+use bytes::Bytes;
 use futures_util::TryStreamExt;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -194,7 +195,7 @@ async fn process_payment(
 }
 
 #[allow(dead_code)]
-async fn get_stream(ctx: &Context) -> consumer::pull::Stream {
+async fn stream_messages(ctx: &Context) -> consumer::pull::Stream {
     let stream = ctx
         .create_stream(Config {
             name: "payments".to_string(),
@@ -255,8 +256,8 @@ impl PaymentProcessor {
     }
 
     #[allow(dead_code)]
-    pub async fn start(self) {
-        get_stream(&self.jetstream_context)
+    pub async fn start(&self) {
+        stream_messages(&self.jetstream_context)
             .await
             .try_for_each_concurrent(
                 std::env::var("MAX_CONCURRENT_MESSAGES")
@@ -268,26 +269,16 @@ impl PaymentProcessor {
 
                     log::debug!("Received payload message: {:?}", msg.payload);
 
-                    let Ok(payment) = Payment::try_from(msg.payload.clone()) else {
-                        log::error!("Failed to deserialize payment");
-                        return Ok(());
-                    };
+                    let payload = msg.payload.clone();
+                    let subject = msg.subject.to_string();
 
-                    match process_payment(
-                        &self.http_client,
-                        &self.pg_pool,
-                        &payment,
-                        &self.backoff_rule,
-                    )
-                    .await
-                    {
+                    match self.process_payload(payload.clone()).await {
                         Ok(_) => {
                             log::debug!("Payment processed successfully");
                         }
                         Err(_) => {
-                            log::warn!("Requeing payment: {}", payment.correlation_id);
                             self.jetstream_context
-                                .publish(msg.subject.clone(), msg.payload.clone())
+                                .publish(subject, payload)
                                 .await
                                 .expect("Failed to requeue message");
                         }
@@ -302,5 +293,48 @@ impl PaymentProcessor {
                 anyhow::anyhow!("Error processing payments: {}", e)
             })
             .expect("Failed to stream messages")
+    }
+
+    async fn process_payload(&self, payload: Bytes) -> Result<(), anyhow::Error> {
+        let payment = Payment::try_from(payload.clone())?;
+
+        for duration in &self.backoff_rule {
+            match send_payment(&self.http_client, &payment, Gateway::Default.url()).await {
+                Ok(_) => {
+                    log::info!("Payment processed successfully with default gateway");
+                    save_payment_to_db(&self.pg_pool, &payment, &Gateway::Default).await?;
+                    return Ok(());
+                }
+                Err(e) => {
+                    log::warn!(
+                        "Failed to process payment with default gateway ({}), using retry strategy. Error: {:?}",
+                        payment.correlation_id,
+                        e
+                    );
+                    tokio::time::sleep(duration.to_owned()).await;
+                }
+            }
+
+            // Try fallback gateway
+            match send_payment(&self.http_client, &payment, Gateway::Fallback.url()).await {
+                Ok(_) => {
+                    log::info!("Payment processed successfully with fallback gateway");
+                    save_payment_to_db(&self.pg_pool, &payment, &Gateway::Fallback).await?;
+                    return Ok(());
+                }
+                Err(e) => {
+                    log::error!(
+                        "Failed to process payment with fallback gateway ({}). Error: {:?}",
+                        payment.correlation_id,
+                        e
+                    );
+                }
+            }
+        }
+
+        Err(anyhow::anyhow!(
+            "Failed to process payment after retries: {}",
+            payment.correlation_id
+        ))
     }
 }
