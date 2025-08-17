@@ -1,4 +1,4 @@
-use rinha_rust_warp::{get_nats_client, routes::Server};
+use rinha_rust_warp::{get_jetstream_context, routes::Server};
 use sqlx::postgres::PgPoolOptions;
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 2)]
@@ -6,8 +6,7 @@ async fn main() -> Result<(), Box<dyn core::error::Error>> {
     // Initialize the logger
     env_logger::init();
 
-    let nats_client = get_nats_client().await?;
-    let jetstream_context = async_nats::jetstream::new(nats_client.clone());
+    let jetstream_context = get_jetstream_context().await?;
 
     let pg_pool = PgPoolOptions::new()
         .min_connections(1)
