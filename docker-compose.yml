@@ -55,25 +55,6 @@ services:
           cpus: "0.39"
           memory: 40MB
 
-  # openresty:
-  #   image: openresty/openresty
-  #   volumes:
-  #     - ./nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf
-  #     - ./lua_scripts:/etc/nginx/lua
-  #     - sockets:/var
-  #   ports:
-  #     - "9999:9999"
-  #   networks:
-  #     - backend
-  #   depends_on:
-  #     - api01
-  #     - api02
-  #   deploy:
-  #     resources:
-  #       limits:
-  #         cpus: '0.25'
-  #         memory: '50MB'
-
   # Payment processing worker
   worker:
     <<: *base-app
