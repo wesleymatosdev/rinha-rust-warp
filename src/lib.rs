@@ -2,18 +2,11 @@ pub mod process_payment;
 pub mod routes;
 use async_nats::Client;
 
-async fn get_nats_client() -> Result<Client, Box<dyn std::error::Error>> {
+pub async fn get_nats_client() -> Result<Client, Box<dyn std::error::Error>> {
     let nats_url =
         std::env::var("NATS_URL").unwrap_or_else(|_| "nats://localhost:4222".to_string());
     let nats_client = async_nats::connect(nats_url).await?;
     Ok(nats_client)
-}
-
-pub async fn get_jetstream_context()
--> Result<async_nats::jetstream::Context, Box<dyn std::error::Error>> {
-    let nats_client = get_nats_client().await?;
-    let jetstream_context = async_nats::jetstream::new(nats_client);
-    Ok(jetstream_context)
 }
 
 // Re-export common types

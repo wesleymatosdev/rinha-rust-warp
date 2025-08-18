@@ -1,6 +1,5 @@
 use std::{collections::HashMap, convert::Infallible, os::unix::fs::PermissionsExt};
 
-use async_nats::jetstream::Context;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::Pool;
@@ -8,8 +7,11 @@ use tokio::net::UnixListener;
 use tokio_stream::wrappers::UnixListenerStream;
 use warp::{Filter, reply::Reply};
 
-async fn payments_handler(body: bytes::Bytes, ctx: Context) -> Result<impl Reply, Infallible> {
-    let _ = ctx.publish("payments", body).await.unwrap().await;
+async fn payments_handler(
+    body: bytes::Bytes,
+    nats_client: async_nats::Client,
+) -> Result<impl Reply, Infallible> {
+    nats_client.publish("payments", body).await.unwrap();
 
     Ok(warp::http::StatusCode::ACCEPTED)
 }
@@ -104,14 +106,14 @@ pub async fn purge_payments(pg_pool: Pool<sqlx::Postgres>) -> Result<impl Reply,
 }
 
 pub struct Server {
-    jetstream_context: Context,
+    nats_client: async_nats::Client,
     pg_pool: Pool<sqlx::Postgres>,
 }
 
 impl Server {
-    pub fn new(jetstream_context: Context, pg_pool: Pool<sqlx::Postgres>) -> Self {
+    pub fn new(nats_client: async_nats::Client, pg_pool: Pool<sqlx::Postgres>) -> Self {
         Server {
-            jetstream_context,
+            nats_client,
             pg_pool,
         }
     }
@@ -120,7 +122,7 @@ impl Server {
         let payments = warp::path("payments")
             .and(warp::post())
             .and(warp::body::bytes())
-            .and(warp::any().map(move || self.jetstream_context.clone()))
+            .and(warp::any().map(move || self.nats_client.clone()))
             .and_then(payments_handler)
             .with(warp::log("payments"));
 

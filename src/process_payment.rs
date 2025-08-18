@@ -1,8 +1,7 @@
 use std::time::Duration;
 
-use async_nats::jetstream::{Context, consumer, stream::Config};
 use bytes::Bytes;
-use futures_util::TryStreamExt;
+use futures_util::StreamExt;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use sqlx::{Executor, Pool};
@@ -195,48 +194,16 @@ async fn process_payment(
 }
 
 #[allow(dead_code)]
-async fn stream_messages(ctx: &Context) -> consumer::pull::Stream {
-    let stream = ctx
-        .create_stream(Config {
-            name: "payments".to_string(),
-            subjects: vec!["payments".to_string()],
-            retention: async_nats::jetstream::stream::RetentionPolicy::Interest,
-            ..Default::default()
-        })
-        .await
-        .expect("Failed to create or get stream");
-
-    let consumer = stream
-        .get_or_create_consumer(
-            "payment-processor",
-            consumer::pull::Config {
-                durable_name: Some("payment-processor".to_string()),
-                max_deliver: 3,
-                ack_policy: consumer::AckPolicy::Explicit,
-                replay_policy: consumer::ReplayPolicy::Instant,
-                ..Default::default()
-            },
-        )
-        .await
-        .expect("Failed to get or create consumer");
-
-    consumer
-        .messages()
-        .await
-        .expect("Failed to get messages from consumer")
-}
-
-#[allow(dead_code)]
 pub struct PaymentProcessor {
     http_client: Client,
     pg_pool: Pool<sqlx::Postgres>,
-    jetstream_context: Context,
+    nats_client: async_nats::Client,
     backoff_rule: Vec<Duration>,
 }
 
 impl PaymentProcessor {
     #[allow(dead_code)]
-    pub fn new(pg_pool: Pool<sqlx::Postgres>, jetstream_context: Context) -> Self {
+    pub fn new(pg_pool: Pool<sqlx::Postgres>, nats_client: async_nats::Client) -> Self {
         let http_client = Client::builder()
             .timeout(Duration::from_secs(10))
             .build()
@@ -250,25 +217,26 @@ impl PaymentProcessor {
         PaymentProcessor {
             http_client,
             pg_pool,
-            jetstream_context,
+            nats_client,
             backoff_rule,
         }
     }
 
     #[allow(dead_code)]
-    pub async fn start(&self) {
-        stream_messages(&self.jetstream_context)
+    pub async fn start_from_client(&self) {
+        let subscriber = self
+            .nats_client
+            .subscribe("payments")
             .await
-            .try_for_each_concurrent(
+            .expect("Failed to subscribe to payments");
+
+        subscriber
+            .for_each_concurrent(
                 std::env::var("MAX_CONCURRENT_MESSAGES")
                     .unwrap_or_else(|_| "200".into())
                     .parse()
                     .unwrap_or(200),
                 async |msg| {
-                    msg.ack().await.expect("Failed to acknowledge message");
-
-                    log::debug!("Received payload message: {:?}", msg.payload);
-
                     let payload = msg.payload.clone();
                     let subject = msg.subject.to_string();
 
@@ -277,22 +245,15 @@ impl PaymentProcessor {
                             log::debug!("Payment processed successfully");
                         }
                         Err(_) => {
-                            self.jetstream_context
+                            self.nats_client
                                 .publish(subject, payload)
                                 .await
                                 .expect("Failed to requeue message");
                         }
                     };
-
-                    Ok(())
                 },
             )
-            .await
-            .map_err(|e| {
-                log::error!("Error processing payments: {:?}", e);
-                anyhow::anyhow!("Error processing payments: {}", e)
-            })
-            .expect("Failed to stream messages")
+            .await;
     }
 
     async fn process_payload(&self, payload: Bytes) -> Result<(), anyhow::Error> {
